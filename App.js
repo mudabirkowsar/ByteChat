@@ -6,8 +6,8 @@ import { auth } from './src/services/firebase';
 
 import LoginScreen from './src/screens/LoginScreen';
 import ChatListScreen from './src/screens/ChatListScreen';
-import ChatRoomScreen from './src/screens/ChatRoomScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
+import ChatScreen from './src/screens/ChatScreen';
 
 const Stack = createStackNavigator();
 
@@ -24,8 +24,8 @@ export default function App() {
       <Stack.Navigator>
         {user ? (
           <>
-            <Stack.Screen name="ChatList" component={ChatListScreen} />
-            <Stack.Screen name="ChatRoom" component={ChatRoomScreen} />
+            <Stack.Screen name="ChatList" component={ChatListScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Chat" component={ChatScreen} />
           </>
         ) : (
           <>
