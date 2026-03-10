@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
     View,
     TextInput,
@@ -7,46 +7,53 @@ import {
     Text,
     StyleSheet,
     KeyboardAvoidingView,
-    Platform
+    Platform,
+    SafeAreaView,
+    StatusBar
 } from "react-native";
 
+import { useHeaderHeight } from "@react-navigation/elements";
 import { Ionicons } from "@expo/vector-icons";
 
 import { db, auth } from "../services/firebase";
-import { collection, addDoc, query, orderBy, onSnapshot } from "firebase/firestore";
+import {
+    collection,
+    addDoc,
+    query,
+    orderBy,
+    onSnapshot,
+    serverTimestamp
+} from "firebase/firestore";
+
 import { getChatId } from "../utils/chatId";
 
-export default function ChatScreen({ route }) {
+export default function ChatScreen({ route, navigation }) {
 
     const { user } = route.params;
     const currentUser = auth.currentUser;
-
     const chatId = getChatId(currentUser.uid, user.uid);
+
+    const headerHeight = useHeaderHeight();
 
     const [messages, setMessages] = useState([]);
     const [text, setText] = useState("");
-
-    const flatListRef = useRef();
 
     useEffect(() => {
 
         const q = query(
             collection(db, "chats", chatId, "messages"),
-            orderBy("createdAt", "asc")
+            orderBy("createdAt", "desc")
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
 
-            const msgList = snapshot.docs.map(doc => ({
+            const msgs = snapshot.docs.map(doc => ({
                 id: doc.id,
-                ...doc.data()
+                ...doc.data(),
+                createdAt: doc.data().createdAt?.toDate() || new Date()
             }));
 
-            setMessages(msgList);
-
-            setTimeout(() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
-            }, 100);
+            setMessages(msgs);
 
         });
 
@@ -56,23 +63,30 @@ export default function ChatScreen({ route }) {
 
     const sendMessage = async () => {
 
-        if (text.trim() === "") return;
+        if (!text.trim()) return;
+
+        const message = text;
+        setText("");
 
         await addDoc(
             collection(db, "chats", chatId, "messages"),
             {
-                text: text,
+                text: message,
                 senderId: currentUser.uid,
-                createdAt: new Date()
+                createdAt: serverTimestamp()
             }
         );
 
-        setText("");
     };
 
     const renderMessage = ({ item }) => {
 
         const isMe = item.senderId === currentUser.uid;
+
+        const time = item.createdAt.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit"
+        });
 
         return (
             <View style={[
@@ -84,122 +98,212 @@ export default function ChatScreen({ route }) {
                     styles.bubble,
                     isMe ? styles.myBubble : styles.otherBubble
                 ]}>
+
                     <Text style={[
                         styles.messageText,
-                        isMe && { color: "#fff" }
+                        isMe ? styles.myText : styles.otherText
                     ]}>
                         {item.text}
                     </Text>
+
+                    <Text style={[
+                        styles.timeText,
+                        isMe ? styles.myTimeText : styles.otherTimeText
+                    ]}>
+                        {time}
+                    </Text>
+
                 </View>
 
             </View>
         );
+
     };
 
     return (
 
-        <KeyboardAvoidingView
-            style={{ flex: 1 }}
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            keyboardVerticalOffset={80}
-        >
+        <SafeAreaView style={styles.safeArea}>
 
-            <View style={styles.container}>
+            <StatusBar barStyle="dark-content" />
 
-                <FlatList
-                    ref={flatListRef}
-                    data={messages}
-                    renderItem={renderMessage}
-                    keyExtractor={(item) => item.id}
-                    contentContainerStyle={{ paddingVertical: 10 }}
-                />
+            <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                keyboardVerticalOffset={headerHeight + 10}
+            >
 
-                <View style={styles.inputContainer}>
+                <View style={styles.container}>
 
-                    <TextInput
-                        value={text}
-                        onChangeText={setText}
-                        placeholder="Type a message..."
-                        style={styles.input}
-                        multiline
+                    <FlatList
+                        data={messages}
+                        renderItem={renderMessage}
+                        keyExtractor={(item) => item.id}
+                        inverted
+                        contentContainerStyle={styles.listContent}
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator={false}
                     />
 
-                    <TouchableOpacity
-                        style={styles.sendButton}
-                        onPress={sendMessage}
-                    >
-                        <Ionicons name="send" size={20} color="#fff" />
-                    </TouchableOpacity>
+                    {/* INPUT */}
+
+                    <View style={styles.inputWrapper}>
+
+                        <View style={styles.inputContainer}>
+
+                            <TouchableOpacity style={styles.plusButton}>
+                                <Ionicons name="add" size={24} color="#007AFF" />
+                            </TouchableOpacity>
+
+                            <TextInput
+                                value={text}
+                                onChangeText={setText}
+                                placeholder="Message..."
+                                placeholderTextColor="#999"
+                                style={styles.input}
+                                multiline
+                            />
+
+                            <TouchableOpacity
+                                style={[
+                                    styles.sendButton,
+                                    !text.trim() && styles.sendDisabled
+                                ]}
+                                onPress={sendMessage}
+                                disabled={!text.trim()}
+                            >
+                                <Ionicons name="arrow-up" size={22} color="#fff" />
+                            </TouchableOpacity>
+
+                        </View>
+
+                    </View>
 
                 </View>
 
-            </View>
+            </KeyboardAvoidingView>
 
-        </KeyboardAvoidingView>
+        </SafeAreaView>
+
     );
+
 }
 
 const styles = StyleSheet.create({
+
+    safeArea: {
+        flex: 1,
+        backgroundColor: "#fff"
+    },
+
     container: {
         flex: 1,
-        backgroundColor: "#F7F9FC", // Softer off-white
+        backgroundColor: "#F2F2F7"
     },
+
+    listContent: {
+        paddingHorizontal: 12,
+        paddingBottom: 10
+    },
+
     messageRow: {
         flexDirection: "row",
-        marginVertical: 2, // Tighter spacing
-        paddingHorizontal: 12,
+        marginVertical: 4
     },
-    myRow: { justifyContent: "flex-end" },
-    otherRow: { justifyContent: "flex-start" },
+
+    myRow: {
+        justifyContent: "flex-end"
+    },
+
+    otherRow: {
+        justifyContent: "flex-start"
+    },
 
     bubble: {
-        paddingVertical: 10,
-        paddingHorizontal: 15,
+        paddingVertical: 8,
+        paddingHorizontal: 14,
         borderRadius: 20,
         maxWidth: "80%",
-        // Adding shadow for depth
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 1,
-        elevation: 2,
+        elevation: 1
     },
+
     myBubble: {
-        backgroundColor: "#007AFF", // Standard modern blue
-        borderBottomRightRadius: 5,
+        backgroundColor: "#007AFF",
+        borderBottomRightRadius: 4
     },
+
     otherBubble: {
-        backgroundColor: "#E9E9EB", // Classic light gray
-        borderBottomLeftRadius: 5,
+        backgroundColor: "#fff",
+        borderBottomLeftRadius: 4
     },
+
     messageText: {
         fontSize: 16,
-        lineHeight: 20,
+        lineHeight: 20
     },
-    inputContainer: {
-        flexDirection: "row",
-        padding: 10,
+
+    myText: {
+        color: "#fff"
+    },
+
+    otherText: {
+        color: "#000"
+    },
+
+    timeText: {
+        fontSize: 10,
+        marginTop: 4,
+        alignSelf: "flex-end"
+    },
+
+    myTimeText: {
+        color: "rgba(255,255,255,0.7)"
+    },
+
+    otherTimeText: {
+        color: "#999"
+    },
+
+    inputWrapper: {
+        paddingHorizontal: 10,
+        paddingVertical: 8,
         backgroundColor: "#fff",
         borderTopWidth: 1,
-        borderColor: "#e0e0e0",
-        paddingBottom: Platform.OS === 'ios' ? 25 : 10, // Account for home indicator
+        borderColor: "#E5E5E5"
     },
+
+    inputContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#F1F1F1",
+        borderRadius: 25,
+        paddingHorizontal: 8,
+        paddingVertical: 5
+    },
+
+    plusButton: {
+        padding: 5
+    },
+
     input: {
         flex: 1,
-        backgroundColor: "#F1F1F1",
-        borderRadius: 22,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
         fontSize: 16,
-        marginRight: 10,
-        maxHeight: 100,
+        color: "#000",
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        maxHeight: 100
     },
+
     sendButton: {
         backgroundColor: "#007AFF",
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
         justifyContent: "center",
-        alignItems: "center",
+        alignItems: "center"
+    },
+
+    sendDisabled: {
+        backgroundColor: "#B2D7FF"
     }
+
 });

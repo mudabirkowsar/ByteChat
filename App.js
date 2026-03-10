@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './src/services/firebase';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import LoginScreen from './src/screens/LoginScreen';
 import ChatListScreen from './src/screens/ChatListScreen';
@@ -18,6 +19,18 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+  const checkLogin = async () => {
+    const loggedIn = await AsyncStorage.getItem("userLoggedIn");
+
+    if (loggedIn === "true") {
+      navigation.replace("ChatList");
+    }
+  };
+
+  checkLogin();
+}, []);
 
   return (
     <NavigationContainer>
